@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Контейнер безопасности — Переварюха М.В.</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        .btn-group { margin-bottom: 20px; }
+        .btn { margin-right: 10px; }
+        .table tbody tr { transition: background-color 0.2s; }
+        .table tbody tr:hover { background-color: #f5f5f5; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <br>
+        <h2><strong>🔒 Контейнер безопасности — Переварюха М.В.</strong></h2>
+        <p class="text-muted">Анализ запросов к веб-ресурсам для предотвращения внедрения вредоносного кода (exe, script)</p>
+        <hr>
+
+        <!-- БЛОК ПРОВЕРКИ URL ВРУЧНУЮ -->
+        <div class="card mb-4" style="background-color: #f8f9fa;">
+            <div class="card-body">
+                <h5>🔍 Проверить URL вручную</h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <input type="text" id="check-url" class="form-control" placeholder="Введите URL (например, https://trusted-bank.ru/page)">
+                    </div>
+                    <div class="col-md-3">
+                        <select id="check-content" class="form-select">
+                            <option value="html">HTML</option>
+                            <option value="exe">EXE (опасный)</option>
+                            <option value="script">Script (опасный)</option>
+                            <option value="pdf">PDF</option>
+                            <option value="image">Image</option>
+                            <option value="text">Text</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button id="check-btn" class="btn btn-primary">🔍 Проверить</button>
+                    </div>
+                </div>
+                <div id="check-result" style="margin-top: 15px; display: none;">
+                    <div class="alert"></div>
+                </div>
+            </div>
+        </div>
+
+        <h4>📊 Статистика решений</h4>
+        <div class="row" id="stats-cards">
+            <div class="col-md-4">
+                <div class="card text-white bg-success mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">✅ Allowed</h5>
+                        <p class="card-text display-4" id="allowed-count">0</p>
+                        <small>Разрешённые запросы (доверенные ресурсы + безопасный контент)</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-white bg-danger mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">⛔ Blocked</h5>
+                        <p class="card-text display-4" id="blocked-count">0</p>
+                        <small>Заблокированные запросы (вредоносные сайты или опасный контент exe/script)</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-white bg-warning mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">⚠️ Quarantine</h5>
+                        <p class="card-text display-4" id="quarantine-count">0</p>
+                        <small>В карантине (неизвестные ресурсы с безопасным контентом)</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h4>📋 Последние запросы</h4>
+        <div class="btn-group" style="margin-bottom: 15px;">
+            <button class="btn btn-primary" id="add-test-request">➕ Добавить тестовый запрос</button>
+            <button class="btn btn-secondary" id="reset-stats">🔄 Сбросить статистику</button>
+            <button class="btn btn-info" id="load-demo-data">📊 Загрузить демо-данные</button>
+        </div>
+
+        <table class="table table-striped table-bordered" id="requests-table">
+            <thead class="table-dark">
+                <tr>
+                    <th>Пользователь</th>
+                    <th>URL</th>
+                    <th>Тип контента</th>
+                    <th>Решение</th>
+                    <th>Причина</th>
+                </tr>
+            </thead>
+            <tbody id="table-body">
+            </tbody>
+        </table>
+
+        <h4>📈 Визуализация результатов</h4>
+        <div class="row">
+            <div class="col-md-6">
+                <canvas id="barChart" width="400" height="300"></canvas>
+            </div>
+            <div class="col-md-6">
+                <canvas id="pieChart" width="400" height="300"></canvas>
+            </div>
+        </div>
+
+        <hr>
+        <footer class="text-muted">
+            <small>Контейнер безопасности — защита от вредоносного кода (exe, script) через заражённые сайты</small>
+            <br>
+            <small>Статусы: ✅ Allowed — разрешено, ⛔ Blocked — заблокировано, ⚠️ Quarantine — карантин</small>
+            <br>
+            <small>💡 Введите URL в поле выше — контейнер проанализирует его и покажет результат</small>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        let requests = [];
+        let barChart = null;
+        let pieChart = null;
+
+        const allowedSpan = document.getElementById('allowed-count');
+        const blockedSpan = document.getElementById('blocked-count');
+        const quarantineSpan = document.getElementById('quarantine-count');
+        const tableBody = document.getElementById('table-body');
+
+        function updateStats() {
+            let allowed = 0, blocked = 0, quarantine = 0;
+            requests.forEach(req => {
+                if (req.decision === 'allowed') allowed++;
+                else if (req.decision === 'blocked') blocked++;
+                else if (req.decision === 'quarantine') quarantine++;
+            });
+            allowedSpan.innerText = allowed;
+            blockedSpan.innerText = blocked;
+            quarantineSpan.innerText = quarantine;
+            return { allowed, blocked, quarantine };
+        }
+
+        function renderTable() {
+            tableBody.innerHTML = '';
+            requests.forEach(req => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${req.user}</td>
+                    <td>${req.url}</td>
+                    <td>${req.content}</td>
+                    <td><span class="badge bg-${req.decision === 'allowed' ? 'success' : (req.decision === 'blocked' ? 'danger' : 'warning')}">${req.decision === 'allowed' ? 'Allowed' : (req.decision === 'blocked' ? 'Blocked' : 'Quarantine')}</span></td>
+                    <td>${req.reason}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function updateCharts() {
+            const stats = updateStats();
+            const newData = [stats.allowed, stats.blocked, stats.quarantine];
+            const labels = ['Allowed', 'Blocked', 'Quarantine'];
+            const colors = ['#28a745', '#dc3545', '#ffc107'];
+            
+            if (barChart) {
+                barChart.data.datasets[0].data = newData;
+                barChart.update();
+            } else {
+                const barCtx = document.getElementById('barChart').getContext('2d');
+                barChart = new Chart(barCtx, {
+                    type: 'bar',
+                    data: { labels, datasets: [{ label: 'Количество запросов', data: newData, backgroundColor: colors, borderColor: colors, borderWidth: 1 }] },
+                    options: { scales: { y: { beginAtZero: true, title: { display: true, text: 'Количество запросов' } }, x: { title: { display: true, text: 'Статус решения' } } } }
+                });
+            }
+            
+            if (pieChart) {
+                pieChart.data.datasets[0].data = newData;
+                pieChart.update();
+            } else {
+                const pieCtx = document.getElementById('pieChart').getContext('2d');
+                pieChart = new Chart(pieCtx, {
+                    type: 'pie',
+                    data: { labels, datasets: [{ data: newData, backgroundColor: colors, borderColor: '#ffffff', borderWidth: 2 }] },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Процентное соотношение решений' }, tooltip: { callbacks: { label: function(context) { const label = context.label || ''; const value = context.raw || 0; const total = newData.reduce((a, b) => a + b, 0); const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0; return `${label}: ${value} (${percentage}%)`; } } } } }
+                });
+            }
+        }
+
+        function fullUpdate() { renderTable(); updateCharts(); }
+
+        function addRequest(user, url, content, decision, reason) { requests.unshift({ user, url, content, decision, reason }); fullUpdate(); }
+        function resetAll() { requests = []; fullUpdate(); }
+        
+        function loadDemoData() {
+            requests = [
+                { user: 'ivanov_aa', url: 'https://trusted-bank.ru/dashboard', content: 'html', decision: 'allowed', reason: 'Доверенный ресурс, контент безопасен' },
+                { user: 'petrov_bb', url: 'https://malicious-site.ru/script.exe', content: 'exe', decision: 'blocked', reason: 'Обнаружен опасный тип контента (exe)' },
+                { user: 'sidorov_cc', url: 'https://unknown-site.com/page', content: 'html', decision: 'quarantine', reason: 'Ресурс неизвестный, контент безопасен' },
+                { user: 'krutov_dd', url: 'https://trusted-bank.ru/transfer', content: 'html', decision: 'allowed', reason: 'Доверенный ресурс, контент безопасен' },
+                { user: 'malyshev_ee', url: 'https://hack-site.org/payload.js', content: 'script', decision: 'blocked', reason: 'Обнаружен опасный тип контента (script)' },
+                { user: 'smirnov_ff', url: 'https://new-resource.com/info', content: 'html', decision: 'quarantine', reason: 'Ресурс неизвестный, контент безопасен' },
+                { user: 'morozov_gg', url: 'https://trusted-bank.ru/settings', content: 'html', decision: 'allowed', reason: 'Доверенный ресурс, контент безопасен' }
+            ];
+            fullUpdate();
+        }
+
+        function generateRandomRequest() {
+            const users = ['alexey_k', 'dmitry_m', 'ekaterina_s', 'maxim_l', 'olga_r'];
+            const urls = ['https://example.com/page', 'https://test-site.org/data', 'https://unknown-resource.net/file', 'https://trusted-service.com/api', 'https://suspicious-site.ru/download.exe'];
+            const contents = ['html', 'exe', 'script', 'text', 'image'];
+            let content = contents[Math.floor(Math.random() * contents.length)];
+            let decision = 'allowed';
+            let reason = 'Доверенный ресурс, контент безопасен';
+            if (content === 'exe' || content === 'script') { decision = 'blocked'; reason = `Обнаружен опасный тип контента (${content})`; }
+            else if (Math.random() > 0.7) { decision = 'quarantine'; reason = 'Ресурс неизвестный, контент безопасен'; }
+            addRequest(users[Math.floor(Math.random() * users.length)], urls[Math.floor(Math.random() * urls.length)], content, decision, reason);
+        }
+
+        // Обработчик кнопки проверки URL
+        document.getElementById('check-btn').addEventListener('click', function() {
+            const url = document.getElementById('check-url').value;
+            const contentType = document.getElementById('check-content').value;
+            const resultDiv = document.getElementById('check-result');
+            const alertDiv = resultDiv.querySelector('.alert');
+            
+            if (!url) {
+                alertDiv.innerHTML = '❌ Введите URL';
+                alertDiv.className = 'alert alert-danger';
+                resultDiv.style.display = 'block';
+                return;
+            }
+            
+            fetch('/api/check/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
+                body: JSON.stringify({ url: url, content_type: contentType })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alertDiv.innerHTML = `❌ Ошибка: ${data.error}`;
+                    alertDiv.className = 'alert alert-danger';
+                } else {
+                    alertDiv.innerHTML = `<strong>Результат проверки:</strong><br>URL: ${url}<br>Тип контента: ${contentType}<br><span style="color: ${data.color}; font-weight: bold;">${data.decision_ru}</span><br>Причина: ${data.reason}`;
+                    alertDiv.className = `alert alert-${data.decision === 'blocked' ? 'danger' : (data.decision === 'quarantine' ? 'warning' : 'success')}`;
+                }
+                resultDiv.style.display = 'block';
+            })
+            .catch(error => {
+                alertDiv.innerHTML = `❌ Ошибка: ${error}`;
+                alertDiv.className = 'alert alert-danger';
+                resultDiv.style.display = 'block';
+            });
+        });
+
+        document.getElementById('add-test-request').addEventListener('click', generateRandomRequest);
+        document.getElementById('reset-stats').addEventListener('click', resetAll);
+        document.getElementById('load-demo-data').addEventListener('click', loadDemoData);
+
+        loadDemoData();
+    </script>
+    {% csrf_token %}
+</body>
+</html>

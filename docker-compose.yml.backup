@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - django
+    networks:
+      - security-network
+
+  django:
+    build: ./security-app
+    container_name: django-security
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+    environment:
+      - DB_NAME=security_db
+      - DB_USER=security_user
+      - DB_PASSWORD=security_pass
+      - DB_HOST=postgres
+      - DB_PORT=5432
+    networks:
+      - security-network
+    volumes:
+      - ./security-app:/app
+
+  postgres:
+    image: postgres:15
+    container_name: postgres-security
+    environment:
+      - POSTGRES_DB=security_db
+      - POSTGRES_USER=security_user
+      - POSTGRES_PASSWORD=security_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - security-network
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin-security
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@security.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - security-network
+
+networks:
+  security-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
